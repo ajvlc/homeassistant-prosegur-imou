@@ -1,0 +1,11 @@
+{
+  "domain": "prosegur_imou",
+  "name": "Movistar Prosegur Unificado",
+  "codeowners": ["@tu_usuario_github"],
+  "config_flow": false,
+  "documentation": "https://github.com/tu_usuario_github/tu_repositorio",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/tu_usuario_github/tu_repositorio/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}
