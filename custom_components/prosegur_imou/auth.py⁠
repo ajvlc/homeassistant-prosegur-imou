@@ -9,10 +9,11 @@ B2C_TENANT = "b4e05b19-..."  # Se actualizará con el GUID exacto del tenant si 
 CLIENT_ID = "79e6e8bb-20d1-4f1f-87a5-51361c0b4984"
 TOKEN_URL = f"https://login.microsoftonline.com/{B2C_TENANT}/oauth2/v2.0/token"
 
+
 class ProsegurAuth:
     """Clase para manejar tokens de acceso y refresh B2C."""
 
-    def __init__(self, session: aiohttp.ClientSession, username: str, password: str):
+    def __init__(self, username: str, password: str, session: aiohttp.ClientSession | None = None):
         self._session = session
         self.username = username
         self.password = password
@@ -39,8 +40,16 @@ class ProsegurAuth:
             "Content-Type": "application/x-www-form-urlencoded",
         }
 
+        # Manejamos si no se pasa una sesión explícita
+        close_session = False
+        session = self._session
+
+        if session is None:
+            session = aiohttp.ClientSession()
+            close_session = True
+
         try:
-            async with self._session.post(TOKEN_URL, data=payload, headers=headers) as resp:
+            async with session.post(TOKEN_URL, data=payload, headers=headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     self.access_token = data.get("access_token")
@@ -52,6 +61,9 @@ class ProsegurAuth:
         except Exception as err:
             _LOGGER.error("Error de conexión durante el login B2C: %s", err)
             return False
+        finally:
+            if close_session and session:
+                await session.close()
 
     async def async_refresh(self) -> bool:
         """Renueva el token de acceso utilizando el refresh token."""
@@ -63,8 +75,16 @@ class ProsegurAuth:
             "client_id": CLIENT_ID,
             "refresh_token": self.refresh_token,
         }
+
+        close_session = False
+        session = self._session
+
+        if session is None:
+            session = aiohttp.ClientSession()
+            close_session = True
+
         try:
-            async with self._session.post(TOKEN_URL, data=payload) as resp:
+            async with session.post(TOKEN_URL, data=payload) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     self.access_token = data.get("access_token")
@@ -73,3 +93,6 @@ class ProsegurAuth:
                 return await self.async_login()
         except Exception:
             return await self.async_login()
+        finally:
+            if close_session and session:
+                await session.close()
