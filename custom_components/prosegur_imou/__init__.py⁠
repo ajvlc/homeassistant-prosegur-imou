@@ -1,0 +1,21 @@
+"""Componente unificado de Movistar Prosegur e IMOU para Home Assistant."""
+import logging
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
+
+_LOGGER = logging.getLogger(__name__)
+
+DOMAIN = "prosegur_imou"
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Inicialización de la integración desde configuration.yaml."""
+    conf = config.get(DOMAIN)
+    if conf is None:
+        return True
+
+    _LOGGER.info("Inicializando integración unificada Movistar Prosegur")
+    
+    # Guardamos la configuración global dentro de hass.data
+    hass.data[DOMAIN] = conf
+
+    return True
