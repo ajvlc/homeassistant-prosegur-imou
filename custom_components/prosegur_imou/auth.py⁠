@@ -1,0 +1,75 @@
+"""Gestor de autenticación B2C para Movistar Prosegur."""
+import logging
+import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
+
+# Configuración del Tenant B2C y AppID
+B2C_TENANT = "b4e05b19-..."  # Se actualizará con el GUID exacto del tenant si procede
+CLIENT_ID = "79e6e8bb-20d1-4f1f-87a5-51361c0b4984"
+TOKEN_URL = f"https://login.microsoftonline.com/{B2C_TENANT}/oauth2/v2.0/token"
+
+class ProsegurAuth:
+    """Clase para manejar tokens de acceso y refresh B2C."""
+
+    def __init__(self, session: aiohttp.ClientSession, username: str, password: str):
+        self._session = session
+        self.username = username
+        self.password = password
+        self.access_token: str | None = None
+        self.refresh_token: str | None = None
+
+    async def async_get_token(self) -> str | None:
+        """Devuelve un token de acceso válido."""
+        if not self.access_token:
+            await self.async_login()
+        return self.access_token
+
+    async def async_login(self) -> bool:
+        """Inicia sesión con credenciales de usuario."""
+        payload = {
+            "grant_type": "password",
+            "client_id": CLIENT_ID,
+            "username": self.username,
+            "password": self.password,
+            "scope": f"openid {CLIENT_ID} offline_access",
+        }
+        headers = {
+            "User-Agent": "Alarmas/1 CFNetwork/3860.400.51 Darwin/25.3.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        try:
+            async with self._session.post(TOKEN_URL, data=payload, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    self.access_token = data.get("access_token")
+                    self.refresh_token = data.get("refresh_token")
+                    _LOGGER.info("Autenticación exitosa en Movistar Prosegur B2C")
+                    return True
+                _LOGGER.error("Error al autenticar en B2C: HTTP %s", resp.status)
+                return False
+        except Exception as err:
+            _LOGGER.error("Error de conexión durante el login B2C: %s", err)
+            return False
+
+    async def async_refresh(self) -> bool:
+        """Renueva el token de acceso utilizando el refresh token."""
+        if not self.refresh_token:
+            return await self.async_login()
+
+        payload = {
+            "grant_type": "refresh_token",
+            "client_id": CLIENT_ID,
+            "refresh_token": self.refresh_token,
+        }
+        try:
+            async with self._session.post(TOKEN_URL, data=payload) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    self.access_token = data.get("access_token")
+                    self.refresh_token = data.get("refresh_token", self.refresh_token)
+                    return True
+                return await self.async_login()
+        except Exception:
+            return await self.async_login()
