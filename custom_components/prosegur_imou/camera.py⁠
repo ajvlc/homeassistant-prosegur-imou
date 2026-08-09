@@ -1,0 +1,39 @@
+"""Entidad de Cámara para Movistar Prosegur e IMOU."""
+import logging
+import aiohttp
+from homeassistant.components.camera import Camera
+
+_LOGGER = logging.getLogger(__name__)
+
+async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
+    """Configura la plataforma de cámara."""
+    vms_api = hass.data.get("prosegur_vms_api")
+    alarm_api = hass.data.get("prosegur_alarm_api")
+    
+    entities = []
+    async_add_entities(entities)
+
+class ProsegurImouCamera(Camera):
+    """Cámara para emisión en directo IMOU VMS."""
+
+    def __init__(self, vms_api, device_id, name):
+        super().__init__()
+        self._vms_api = vms_api
+        self._device_id = device_id
+        self._attr_name = name
+        self._attr_unique_id = f"prosegur_imou_{device_id}"
+
+    async def stream_source(self):
+        """Recupera la URL del flujo RTSP/HLS en directo."""
+        return await self._vms_api.async_get_live_url(self._device_id)
+
+    async def async_camera_image(self, width=None, height=None):
+        """Captura una imagen estática utilizando el stream."""
+        url = await self.stream_source()
+        if not url:
+            return None
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+        return None
