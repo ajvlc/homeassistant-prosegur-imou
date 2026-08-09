@@ -2,11 +2,10 @@
   "domain": "prosegur_imou",
   "name": "Movistar Prosegur Unificado",
   "codeowners": ["@ajvlc"],
-  "config_flow": false,
+  "config_flow": true,
   "documentation": "https://github.com/ajvlc/homeassistant-prosegur-imou",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/ajvlc/homeassistant-prosegur-imou/issues",
   "requirements": [],
   "version": "1.0.0"
 }
-
