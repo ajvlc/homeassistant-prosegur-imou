@@ -10,27 +10,17 @@ from homeassistant.const import (
     STATE_ALARM_DISARMED,
 )
 
-from .alarm_api import ProsegurAlarmAPI
-from .auth import ProsegurAuth
-
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "prosegur_imou"
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Configura la plataforma del panel de alarma desde la interfaz (ConfigEntry)."""
-    # Extraemos las credenciales guardadas en el flujo visual
-    config = hass.data[DOMAIN][entry.entry_id]
-    username = config["username"]
-    password = config["password"]
-    contract_id = config["contract_id"]
+    """Configura la entidad de alarma usando los objetos globales."""
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    alarm_api = entry_data["alarm_api"]
+    contract_id = entry_data["contract_id"]
 
-    # Inicializamos la autenticación y la API
-    auth = ProsegurAuth(username, password, contract_id)
-    api = ProsegurAlarmAPI(auth)
-
-    # Añadimos la entidad
-    async_add_entities([ProsegurAlarmEntity(api, contract_id)], True)
+    async_add_entities([ProsegurAlarmEntity(alarm_api, contract_id)], True)
 
 
 class ProsegurAlarmEntity(AlarmControlPanelEntity):
@@ -48,14 +38,14 @@ class ProsegurAlarmEntity(AlarmControlPanelEntity):
 
     @property
     def state(self):
-        """Devuelve el estado actual de la alarma."""
+        """Estado actual."""
         return self._state
 
     async def async_update(self):
-        """Consulta el estado del panel en la API de Prosegur."""
+        """Consulta el estado del panel en la API."""
         res = await self._api.async_get_status()
         if res:
-            status = res.get("status", "").upper()
+            status = str(res.get("status", "")).upper()
             if status in ("ARMED", "TOTAL"):
                 self._state = STATE_ALARM_ARMED_AWAY
             elif status in ("PARTIAL", "NIGHT"):
@@ -64,19 +54,16 @@ class ProsegurAlarmEntity(AlarmControlPanelEntity):
                 self._state = STATE_ALARM_DISARMED
 
     async def async_alarm_disarm(self, code=None):
-        """Desarma la alarma."""
         if await self._api.async_change_status("DISARMED"):
             self._state = STATE_ALARM_DISARMED
             self.async_write_ha_state()
 
     async def async_alarm_arm_away(self, code=None):
-        """Armado Total."""
         if await self._api.async_change_status("ARMED"):
             self._state = STATE_ALARM_ARMED_AWAY
             self.async_write_ha_state()
 
     async def async_alarm_arm_home(self, code=None):
-        """Armado Parcial / Noche."""
         if await self._api.async_change_status("PARTIAL"):
             self._state = STATE_ALARM_ARMED_HOME
             self.async_write_ha_state()
