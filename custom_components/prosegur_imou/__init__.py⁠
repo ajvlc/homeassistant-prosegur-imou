@@ -8,9 +8,11 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "prosegur_imou"
 PLATFORMS = ["alarm_control_panel", "camera"]
 
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Inicialización legacy desde configuration.yaml."""
     return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Inicialización desde el flujo de configuración visual (Config Flow)."""
@@ -19,9 +21,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Cargando integración unificada Movistar Prosegur (%s)", entry.title)
 
-    # Registra las plataformas asociadas (alarma y cámara)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Desinstala una entrada de configuración."""
@@ -29,4 +31,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
-
