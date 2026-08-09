@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Movistar Prosegur Unificado",
+        "description": "Introduce tus credenciales de acceso.",
+        "data": {
+          "username": "Usuario / Email",
+          "password": "Contraseña",
+          "contract_id": "Número de Contrato"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Usuario o contraseña incorrectos.",
+      "cannot_connect": "Error al conectar con el servicio."
+    }
+  }
+}
