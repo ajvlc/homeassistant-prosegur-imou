@@ -1,34 +1,34 @@
 """Entidad de Cámara para Movistar Prosegur e IMOU."""
 import logging
-import aiohttp
 from homeassistant.components.camera import Camera
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "prosegur_imou"
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Configura la plataforma de cámara desde la interfaz visual."""
-    # Recuperamos la API guardada en hass.data durante el setup del componente
-    vms_api = hass.data[DOMAIN].get(entry.entry_id, {}).get("vms_api")
-    
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Configura las cámaras de forma segura."""
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    vms_api = entry_data.get("vms_api")
+    contract_id = entry_data.get("contract_id")
+
     entities = []
-    
-    # Si la API está disponible, obtenemos los dispositivos
-    if vms_api:
-        devices = await vms_api.async_get_devices()
-        for dev in devices:
-            entities.append(
-                ProsegurImouCamera(
-                    vms_api=vms_api,
-                    device_id=dev.get("id"),
-                    name=dev.get("name", f"Cámara {dev.get('id')}"),
-                    contract_id=entry.data.get("contract_id")
-                )
-            )
+    if vms_api and hasattr(vms_api, "async_get_devices"):
+        try:
+            devices = await vms_api.async_get_devices()
+            if devices:
+                for dev in devices:
+                    entities.append(
+                        ProsegurImouCamera(
+                            vms_api=vms_api,
+                            device_id=dev.get("id"),
+                            name=dev.get("name", f"Cámara {dev.get('id')}"),
+                            contract_id=contract_id,
+                        )
+                    )
+        except Exception as err:
+            _LOGGER.error("Error al obtener cámaras VMS: %s", err)
 
     async_add_entities(entities, True)
 
@@ -44,21 +44,19 @@ class ProsegurImouCamera(Camera):
         self._attr_unique_id = f"prosegur_imou_{contract_id}_{device_id}" if contract_id else f"prosegur_imou_{device_id}"
 
     async def stream_source(self):
-        """Recupera la URL del flujo RTSP/HLS en directo."""
         return await self._vms_api.async_get_live_url(self._device_id)
 
     async def async_camera_image(self, width=None, height=None):
-        """Captura una imagen estática utilizando el stream."""
         url = await self.stream_source()
         if not url:
             return None
-            
+
         session = async_get_clientsession(self.hass)
         try:
             async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     return await resp.read()
         except Exception as err:
-            _LOGGER.error("Error al obtener la imagen de la cámara %s: %s", self._device_id, err)
-            
+            _LOGGER.error("Error al obtener imagen de cámara %s: %s", self._device_id, err)
+
         return None
