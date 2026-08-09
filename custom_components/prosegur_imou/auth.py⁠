@@ -1,98 +1,56 @@
-"""Gestor de autenticación B2C para Movistar Prosegur."""
-import logging
-import aiohttp
+"""Flujo de configuración visual para Movistar Prosegur Unificado."""
 
+import logging
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+DOMAIN = "prosegur_imou"
 _LOGGER = logging.getLogger(__name__)
 
-# Configuración del Tenant B2C y AppID
-B2C_TENANT = "b4e05b19-..."  # Se actualizará con el GUID exacto del tenant si procede
-CLIENT_ID = "79e6e8bb-20d1-4f1f-87a5-51361c0b4984"
-TOKEN_URL = f"https://login.microsoftonline.com/{B2C_TENANT}/oauth2/v2.0/token"
 
+class ProsegurConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Maneja el formulario interactivo de configuración desde la interfaz."""
 
-class ProsegurAuth:
-    """Clase para manejar tokens de acceso y refresh B2C."""
+    VERSION = 1
 
-    def __init__(self, username: str, password: str, session: aiohttp.ClientSession | None = None):
-        self._session = session
-        self.username = username
-        self.password = password
-        self.access_token: str | None = None
-        self.refresh_token: str | None = None
+    async def async_step_user(self, user_input=None):
+        """Paso inicial al añadir la integración."""
+        errors = {}
 
-    async def async_get_token(self) -> str | None:
-        """Devuelve un token de acceso válido."""
-        if not self.access_token:
-            await self.async_login()
-        return self.access_token
+        if user_input is not None:
+            await self.async_set_unique_id(user_input["username"].lower())
+            self._abort_if_unique_id_configured()
 
-    async def async_login(self) -> bool:
-        """Inicia sesión con credenciales de usuario."""
-        payload = {
-            "grant_type": "password",
-            "client_id": CLIENT_ID,
-            "username": self.username,
-            "password": self.password,
-            "scope": f"openid {CLIENT_ID} offline_access",
-        }
-        headers = {
-            "User-Agent": "Alarmas/1 CFNetwork/3860.400.51 Darwin/25.3.0",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
+            try:
+                from .auth import ProsegurAuth
 
-        # Manejamos si no se pasa una sesión explícita
-        close_session = False
-        session = self._session
+                session = async_get_clientsession(self.hass)
+                auth = ProsegurAuth(
+                    username=user_input["username"],
+                    password=user_input["password"],
+                    session=session,
+                )
+                token = await auth.async_get_token()
+                if not token:
+                    errors["base"] = "invalid_auth"
+            except Exception as err:
+                _LOGGER.warning("Error al validar credenciales: %s", err)
+                errors["base"] = "cannot_connect"
 
-        if session is None:
-            session = aiohttp.ClientSession()
-            close_session = True
+            if not errors:
+                return self.async_create_entry(
+                    title=f"Prosegur ({user_input['username']})",
+                    data=user_input,
+                )
 
-        try:
-            async with session.post(TOKEN_URL, data=payload, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.access_token = data.get("access_token")
-                    self.refresh_token = data.get("refresh_token")
-                    _LOGGER.info("Autenticación exitosa en Movistar Prosegur B2C")
-                    return True
-                _LOGGER.error("Error al autenticar en B2C: HTTP %s", resp.status)
-                return False
-        except Exception as err:
-            _LOGGER.error("Error de conexión durante el login B2C: %s", err)
-            return False
-        finally:
-            if close_session and session:
-                await session.close()
+        data_schema = vol.Schema({
+            vol.Required("username"): str,
+            vol.Required("password"): str,
+        })
 
-    async def async_refresh(self) -> bool:
-        """Renueva el token de acceso utilizando el refresh token."""
-        if not self.refresh_token:
-            return await self.async_login()
-
-        payload = {
-            "grant_type": "refresh_token",
-            "client_id": CLIENT_ID,
-            "refresh_token": self.refresh_token,
-        }
-
-        close_session = False
-        session = self._session
-
-        if session is None:
-            session = aiohttp.ClientSession()
-            close_session = True
-
-        try:
-            async with session.post(TOKEN_URL, data=payload) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    self.access_token = data.get("access_token")
-                    self.refresh_token = data.get("refresh_token", self.refresh_token)
-                    return True
-                return await self.async_login()
-        except Exception:
-            return await self.async_login()
-        finally:
-            if close_session and session:
-                await session.close()
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
+        )
