@@ -17,36 +17,33 @@ class ProsegurConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Evita añadir el mismo contrato dos veces
-            await self.async_set_unique_id(user_input["contract_id"])
+            # Usamos el propio usuario como Unique ID para evitar duplicar la misma cuenta
+            await self.async_set_unique_id(user_input["username"].lower())
             self._abort_if_unique_id_configured()
 
-            # Intentamos importar la autenticación dentro del paso para evitar fallos al cargar el módulo
             try:
                 from .auth import ProsegurAuth
                 auth = ProsegurAuth(
-                    user_input["username"],
-                    user_input["password"],
-                    user_input["contract_id"],
+                    username=user_input["username"],
+                    password=user_input["password"],
                 )
                 token = await auth.async_get_token()
                 if not token:
                     errors["base"] = "invalid_auth"
             except Exception as err:
-                _LOGGER.warning("No se pudo validar credenciales antes de guardar (o no existe auth.py): %s", err)
+                _LOGGER.warning("Error al validar credenciales: %s", err)
+                errors["base"] = "cannot_connect"
 
-            # Si no hay errores críticos de validación, creamos la entrada
             if not errors:
                 return self.async_create_entry(
-                    title=f"Prosegur ({user_input['contract_id']})",
+                    title=f"Prosegur ({user_input['username']})",
                     data=user_input,
                 )
 
-        # Formulario que aparecerá en la ventana emergente
+        # Formulario simplificado: solo PIDE usuario y contraseña
         data_schema = vol.Schema({
             vol.Required("username"): str,
             vol.Required("password"): str,
-            vol.Required("contract_id"): str,
         })
 
         return self.async_show_form(
