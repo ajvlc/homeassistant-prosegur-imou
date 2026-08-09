@@ -2,26 +2,46 @@
 import logging
 import aiohttp
 from homeassistant.components.camera import Camera
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
+DOMAIN = "prosegur_imou"
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Configura la plataforma de cámara."""
-    vms_api = hass.data.get("prosegur_vms_api")
-    alarm_api = hass.data.get("prosegur_alarm_api")
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
+    """Configura la plataforma de cámara desde la interfaz visual."""
+    # Recuperamos la API guardada en hass.data durante el setup del componente
+    vms_api = hass.data[DOMAIN].get(entry.entry_id, {}).get("vms_api")
     
     entities = []
-    async_add_entities(entities)
+    
+    # Si la API está disponible, obtenemos los dispositivos
+    if vms_api:
+        devices = await vms_api.async_get_devices()
+        for dev in devices:
+            entities.append(
+                ProsegurImouCamera(
+                    vms_api=vms_api,
+                    device_id=dev.get("id"),
+                    name=dev.get("name", f"Cámara {dev.get('id')}"),
+                    contract_id=entry.data.get("contract_id")
+                )
+            )
+
+    async_add_entities(entities, True)
+
 
 class ProsegurImouCamera(Camera):
     """Cámara para emisión en directo IMOU VMS."""
 
-    def __init__(self, vms_api, device_id, name):
+    def __init__(self, vms_api, device_id, name, contract_id=None):
         super().__init__()
         self._vms_api = vms_api
         self._device_id = device_id
         self._attr_name = name
-        self._attr_unique_id = f"prosegur_imou_{device_id}"
+        self._attr_unique_id = f"prosegur_imou_{contract_id}_{device_id}" if contract_id else f"prosegur_imou_{device_id}"
 
     async def stream_source(self):
         """Recupera la URL del flujo RTSP/HLS en directo."""
@@ -32,8 +52,13 @@ class ProsegurImouCamera(Camera):
         url = await self.stream_source()
         if not url:
             return None
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            
+        session = async_get_clientsession(self.hass)
+        try:
+            async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     return await resp.read()
+        except Exception as err:
+            _LOGGER.error("Error al obtener la imagen de la cámara %s: %s", self._device_id, err)
+            
         return None
