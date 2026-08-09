@@ -2,13 +2,16 @@
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+from .auth import ProsegurAuth
 
 DOMAIN = "prosegur_imou"
 _LOGGER = logging.getLogger(__name__)
 
 
 class ProsegurConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Maneja el formulario interactivo de configuración desde la interfaz."""
+    """Maneja el formulario interactivo de configuración."""
 
     VERSION = 1
 
@@ -17,15 +20,15 @@ class ProsegurConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Usamos el propio usuario como Unique ID para evitar duplicar la misma cuenta
             await self.async_set_unique_id(user_input["username"].lower())
             self._abort_if_unique_id_configured()
 
             try:
-                from .auth import ProsegurAuth
+                session = async_get_clientsession(self.hass)
                 auth = ProsegurAuth(
                     username=user_input["username"],
                     password=user_input["password"],
+                    session=session,
                 )
                 token = await auth.async_get_token()
                 if not token:
@@ -40,7 +43,6 @@ class ProsegurConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data=user_input,
                 )
 
-        # Formulario simplificado: solo PIDE usuario y contraseña
         data_schema = vol.Schema({
             vol.Required("username"): str,
             vol.Required("password"): str,
